@@ -5,14 +5,66 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
 import os
+import json
+import jwt
+import datetime
 from pathlib import Path
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
+
+# Security
+security = HTTPBearer(auto_error=False)
+SECRET_KEY = "mergington-high-school-secret-key"  # In production, use environment variable
+
+# Request models
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class SignupRequest(BaseModel):
+    email: str
+
+# Load teacher credentials
+def load_teachers():
+    try:
+        with open(os.path.join(Path(__file__).parent, "teachers.json"), "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"teachers": {}}
+
+def verify_teacher_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Verify teacher authentication token"""
+    if not credentials:
+        return None
+    
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=["HS256"])
+        username = payload.get("username")
+        teachers_data = load_teachers()
+        if username in teachers_data["teachers"]:
+            return username
+    except jwt.InvalidTokenError:
+        pass
+    
+    return None
+
+def require_teacher_auth(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Require teacher authentication"""
+    teacher = verify_teacher_token(credentials)
+    if not teacher:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Teacher authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return teacher
 
 # Mount the static files directory
 current_dir = Path(__file__).parent
@@ -82,6 +134,42 @@ activities = {
 def root():
     return RedirectResponse(url="/static/index.html")
 
+@app.post("/auth/login")
+def login(request: LoginRequest):
+    """Teacher login endpoint"""
+    teachers_data = load_teachers()
+    
+    if (request.username in teachers_data["teachers"] and 
+        teachers_data["teachers"][request.username]["password"] == request.password):
+        
+        # Create JWT token
+        token_data = {
+            "username": request.username,
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+        }
+        token = jwt.encode(token_data, SECRET_KEY, algorithm="HS256")
+        
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "teacher_name": teachers_data["teachers"][request.username]["name"]
+        }
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid username or password"
+    )
+
+@app.get("/auth/verify")
+def verify_auth(teacher: str = Depends(verify_teacher_token)):
+    """Verify if current token is valid"""
+    if teacher:
+        teachers_data = load_teachers()
+        return {
+            "authenticated": True,
+            "teacher_name": teachers_data["teachers"][teacher]["name"]
+        }
+    return {"authenticated": False}
 
 @app.get("/activities")
 def get_activities():
@@ -89,8 +177,8 @@ def get_activities():
 
 
 @app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
-    """Sign up a student for an activity"""
+def signup_for_activity(activity_name: str, request: SignupRequest, teacher: str = Depends(require_teacher_auth)):
+    """Sign up a student for an activity (teacher only)"""
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -99,20 +187,20 @@ def signup_for_activity(activity_name: str, email: str):
     activity = activities[activity_name]
 
     # Validate student is not already signed up
-    if email in activity["participants"]:
+    if request.email in activity["participants"]:
         raise HTTPException(
             status_code=400,
             detail="Student is already signed up"
         )
 
     # Add student
-    activity["participants"].append(email)
-    return {"message": f"Signed up {email} for {activity_name}"}
+    activity["participants"].append(request.email)
+    return {"message": f"Signed up {request.email} for {activity_name}"}
 
 
 @app.delete("/activities/{activity_name}/unregister")
-def unregister_from_activity(activity_name: str, email: str):
-    """Unregister a student from an activity"""
+def unregister_from_activity(activity_name: str, email: str, teacher: str = Depends(require_teacher_auth)):
+    """Unregister a student from an activity (teacher only)"""
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -130,3 +218,66 @@ def unregister_from_activity(activity_name: str, email: str):
     # Remove student
     activity["participants"].remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}
+
+
+# Load teacher credentials
+def load_teachers():
+    try:
+        with open(os.path.join(Path(__file__).parent, "teachers.json"), "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"teachers": {}}
+
+def verify_teacher_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Verify teacher authentication token"""
+    if not credentials:
+        return None
+    
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=["HS256"])
+        username = payload.get("username")
+        teachers_data = load_teachers()
+        if username in teachers_data["teachers"]:
+            return username
+    except jwt.InvalidTokenError:
+        pass
+    
+    return None
+
+def require_teacher_auth(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Require teacher authentication"""
+    teacher = verify_teacher_token(credentials)
+    if not teacher:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Teacher authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return teacher
+
+@app.post("/auth/login")
+def login(request: LoginRequest):
+    """Teacher login endpoint"""
+    teachers_data = load_teachers()
+    
+    if (request.username in teachers_data["teachers"] and 
+        teachers_data["teachers"][request.username]["password"] == request.password):
+        
+        # Create JWT token
+        token_data = {
+            "username": request.username,
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+        }
+        token = jwt.encode(token_data, SECRET_KEY, algorithm="HS256")
+        
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "teacher_name": teachers_data["teachers"][request.username]["name"]
+        }
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid username or password"
+    )
+

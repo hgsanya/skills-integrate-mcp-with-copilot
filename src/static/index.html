@@ -10,7 +10,34 @@
     <header>
       <h1>Mergington High School</h1>
       <h2>Extracurricular Activities</h2>
+      <div class="user-controls">
+        <div id="auth-status" class="hidden">
+          <span id="teacher-name"></span>
+          <button id="logout-btn">Logout</button>
+        </div>
+        <button id="login-btn">👤 Teacher Login</button>
+      </div>
     </header>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal hidden">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h3>Teacher Login</h3>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="email" id="username" required placeholder="teacher@mergington.edu" />
+          </div>
+          <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" required />
+          </div>
+          <button type="submit">Login</button>
+        </form>
+        <div id="login-message" class="hidden"></div>
+      </div>
+    </div>
 
     <main>
       <section id="activities-container">
@@ -22,20 +49,24 @@
       </section>
 
       <section id="signup-container">
-        <h3>Sign Up for an Activity</h3>
-        <form id="signup-form">
+        <h3>Student Registration (Teachers Only)</h3>
+        <div id="teacher-only-notice" class="notice">
+          <p>📋 Only logged-in teachers can register and unregister students.</p>
+          <p>Students can view who is registered for activities.</p>
+        </div>
+        <form id="signup-form" class="disabled">
           <div class="form-group">
             <label for="email">Student Email:</label>
-            <input type="email" id="email" required placeholder="your-email@mergington.edu" />
+            <input type="email" id="email" required placeholder="student@mergington.edu" disabled />
           </div>
           <div class="form-group">
             <label for="activity">Select Activity:</label>
-            <select id="activity" required>
+            <select id="activity" required disabled>
               <option value="">-- Select an activity --</option>
               <!-- Activity options will be loaded here -->
             </select>
           </div>
-          <button type="submit">Sign Up</button>
+          <button type="submit" disabled>Sign Up Student</button>
         </form>
         <div id="message" class="hidden"></div>
       </section>
