@@ -281,13 +281,3 @@ def login(request: LoginRequest):
         detail="Invalid username or password"
     )
 
-@app.get("/auth/verify")
-def verify_auth(teacher: str = Depends(verify_teacher_token)):
-    """Verify if current token is valid"""
-    if teacher:
-        teachers_data = load_teachers()
-        return {
-            "authenticated": True,
-            "teacher_name": teachers_data["teachers"][teacher]["name"]
-        }
-    return {"authenticated": False}
